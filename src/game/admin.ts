@@ -2,6 +2,7 @@ import { State, StateMachine } from "./stateMachine";
 import { UIManager } from "../ui/ui";
 import { Renderer } from "../engine/renderer";
 import { storage, StoredAsset } from "../engine/storage";
+import { GameData } from "../content";
 
 export class AdminState implements State {
     sm: StateMachine;
@@ -331,7 +332,9 @@ export class AdminState implements State {
         }
     }
 
-    returnToIntro() {
+    async returnToIntro() {
+        await GameData.loadCustomContent();
+        this.sm.audio.setupBGM();
         import('./intro.ts').then(({ IntroState }) => {
             this.sm.changeState(new IntroState(this.sm));
         });

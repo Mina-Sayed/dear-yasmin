@@ -10,6 +10,7 @@ export class Level2State implements State {
 
     stars: { x: number, y: number, r: number, active: boolean }[] = [];
     collectedCount = 0;
+    private thrustSoundTimer = 0;
 
     gravity = 600;
     thrust = -1400; // Strong upward force
@@ -27,11 +28,13 @@ export class Level2State implements State {
         this.player.vy = 0;
         this.fuel = 100;
         this.collectedCount = 0;
+        this.thrustSoundTimer = 0;
 
         this.stars = [];
         // Generate stars upward
         const startY = this.player.y - 200;
-        for (let i = 0; i < 30; i++) {
+        const starCount = Math.max(30, GameData.level2StarsToWin);
+        for (let i = 0; i < starCount; i++) {
             this.stars.push({
                 x: 50 + Math.random() * (this.sm.renderer.width - 100),
                 y: startY - (i * 200), // Spacing
@@ -58,9 +61,14 @@ export class Level2State implements State {
         if (isThrusting && this.fuel > 0) {
             this.player.vy += this.thrust * dt;
             this.fuel -= 30 * dt; // Consumption rate
-            this.sm.audio.play('jump'); // Maybe loop sound better? Discrete for now.
+            this.thrustSoundTimer += dt;
+            if (this.thrustSoundTimer >= 0.15) {
+                this.sm.audio.play('jump');
+                this.thrustSoundTimer = 0;
+            }
         } else if (!isThrusting && this.fuel < 100) {
             this.fuel = Math.min(100, this.fuel + 10 * dt); // Regen with clamp
+            this.thrustSoundTimer = 0;
         }
 
         this.player.y += this.player.vy * dt;

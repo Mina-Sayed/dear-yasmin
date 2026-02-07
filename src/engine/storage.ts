@@ -30,7 +30,17 @@ export interface GameConfig {
 
 export class StorageManager {
     private db: IDBDatabase | null = null;
-    private objectUrls: string[] = [];
+    private objectUrls: Map<string, string> = new Map();
+
+    private getOrCreateObjectUrl(assetData: StoredAssetData): string {
+        const existingUrl = this.objectUrls.get(assetData.id);
+        if (existingUrl) {
+            return existingUrl;
+        }
+        const url = URL.createObjectURL(assetData.data);
+        this.objectUrls.set(assetData.id, url);
+        return url;
+    }
 
     async init(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -60,7 +70,6 @@ export class StorageManager {
         // Revoke old URL if exists
         await this.deleteAsset(id);
 
-        const url = URL.createObjectURL(data);
         const assetData: StoredAssetData = {
             id,
             type,
@@ -69,6 +78,7 @@ export class StorageManager {
             text,
             createdAt: Date.now()
         };
+        const url = this.getOrCreateObjectUrl(assetData);
 
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction([STORE_ASSETS], 'readwrite');
@@ -76,7 +86,6 @@ export class StorageManager {
             const request = store.put(assetData);
 
             request.onsuccess = () => {
-                this.objectUrls.push(url);
                 resolve({ ...assetData, url });
             };
             request.onerror = () => reject(request.error);
@@ -94,9 +103,7 @@ export class StorageManager {
             request.onsuccess = () => {
                 const assetData = request.result as StoredAssetData | undefined;
                 if (assetData) {
-                    // Create fresh object URL from stored blob
-                    const url = URL.createObjectURL(assetData.data);
-                    this.objectUrls.push(url);
+                    const url = this.getOrCreateObjectUrl(assetData);
                     resolve({ ...assetData, url });
                 } else {
                     resolve(null);
@@ -117,9 +124,7 @@ export class StorageManager {
             request.onsuccess = () => {
                 const assetsData = request.result as StoredAssetData[];
                 const assets: StoredAsset[] = assetsData.map(assetData => {
-                    // Create fresh object URL from stored blob
-                    const url = URL.createObjectURL(assetData.data);
-                    this.objectUrls.push(url);
+                    const url = this.getOrCreateObjectUrl(assetData);
                     return { ...assetData, url };
                 });
                 if (type) {
@@ -159,9 +164,10 @@ export class StorageManager {
     async deleteAsset(id: string): Promise<void> {
         if (!this.db) throw new Error('Storage not initialized');
 
-        const existing = await this.getAsset(id);
-        if (existing?.url) {
-            URL.revokeObjectURL(existing.url);
+        const existingUrl = this.objectUrls.get(id);
+        if (existingUrl) {
+            URL.revokeObjectURL(existingUrl);
+            this.objectUrls.delete(id);
         }
 
         return new Promise((resolve, reject) => {
@@ -205,7 +211,7 @@ export class StorageManager {
 
     cleanup(): void {
         this.objectUrls.forEach(url => URL.revokeObjectURL(url));
-        this.objectUrls = [];
+        this.objectUrls.clear();
     }
 }
 

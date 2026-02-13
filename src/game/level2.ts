@@ -7,6 +7,8 @@ export class Level2State implements State {
     sm: StateMachine;
     player = { x: 50, y: 0, w: 30, h: 50, vy: 0 };
     fuel = 100;
+    private jumpSoundCooldown = 0;
+    private readonly jumpSoundInterval = 0.12;
 
     stars: { x: number, y: number, r: number, active: boolean }[] = [];
     collectedCount = 0;
@@ -27,6 +29,7 @@ export class Level2State implements State {
         this.player.vy = 0;
         this.fuel = 100;
         this.collectedCount = 0;
+        this.jumpSoundCooldown = 0;
 
         this.stars = [];
         // Generate stars upward
@@ -44,6 +47,8 @@ export class Level2State implements State {
     }
 
     update(dt: number) {
+        this.jumpSoundCooldown = Math.max(0, this.jumpSoundCooldown - dt);
+
         // Physics
         this.player.vy += this.gravity * dt;
 
@@ -53,12 +58,15 @@ export class Level2State implements State {
         }
 
         // Thrust input
-        const isThrusting = (this.sm.input.actionPressed || this.sm.input.keys['Space']);
+        const isThrusting = this.sm.input.isActionActive();
 
         if (isThrusting && this.fuel > 0) {
             this.player.vy += this.thrust * dt;
             this.fuel -= 30 * dt; // Consumption rate
-            this.sm.audio.play('jump'); // Maybe loop sound better? Discrete for now.
+            if (this.jumpSoundCooldown <= 0) {
+                this.sm.audio.play('jump');
+                this.jumpSoundCooldown = this.jumpSoundInterval;
+            }
         } else if (!isThrusting && this.fuel < 100) {
             this.fuel = Math.min(100, this.fuel + 10 * dt); // Regen with clamp
         }
@@ -147,7 +155,7 @@ export class Level2State implements State {
         r.ctx.fill();
 
         // Flame
-        if ((this.sm.input.actionPressed || this.sm.input.keys['Space']) && this.fuel > 0) {
+        if (this.sm.input.isActionActive() && this.fuel > 0) {
             r.ctx.fillStyle = 'orange';
             r.ctx.beginPath();
             r.ctx.moveTo(this.player.x + 10, this.player.y + this.player.h);

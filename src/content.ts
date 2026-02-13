@@ -1,4 +1,5 @@
 import { storage } from "./engine/storage";
+import { resolveAssetPath } from "./engine/assetPath";
 
 export interface Memory {
     id: number;
@@ -8,11 +9,11 @@ export interface Memory {
 
 // Default memories (fallback)
 export const defaultMemories: Memory[] = [
-    { id: 1, text: "Our first date at the coffee shop ☕", img: "/assets/photos/p1.jpg" },
-    { id: 2, text: "The trip to the beach 🌊", img: "/assets/photos/p2.jpg" },
-    { id: 3, text: "Your graduation day 🎓", img: "/assets/photos/p3.jpg" },
-    { id: 4, text: "That time we got lost hiking 🏔️", img: "/assets/photos/p4.jpg" },
-    { id: 5, text: "Cooking dinner together 🍝", img: "/assets/photos/p5.jpg" },
+    { id: 1, text: "Our first date at the coffee shop ☕", img: resolveAssetPath("assets/photos/p1.jpg") },
+    { id: 2, text: "The trip to the beach 🌊", img: resolveAssetPath("assets/photos/p2.jpg") },
+    { id: 3, text: "Your graduation day 🎓", img: resolveAssetPath("assets/photos/p3.jpg") },
+    { id: 4, text: "That time we got lost hiking 🏔️", img: resolveAssetPath("assets/photos/p4.jpg") },
+    { id: 5, text: "Cooking dinner together 🍝", img: resolveAssetPath("assets/photos/p5.jpg") },
 ];
 
 // Reactive GameData that can be updated

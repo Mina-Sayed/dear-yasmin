@@ -2,6 +2,7 @@ export class InputManager {
     keys: { [key: string]: boolean } = {};
     joystick: { x: number, y: number, active: boolean } = { x: 0, y: 0, active: false };
     actionPressed: boolean = false;
+    private keyboardActionPressed: boolean = false;
 
     // Joystick config
     private dragStart: { x: number, y: number } | null = null;
@@ -13,8 +14,14 @@ export class InputManager {
     }
 
     startListening() {
-        window.addEventListener('keydown', (e) => this.keys[e.code] = true);
-        window.addEventListener('keyup', (e) => this.keys[e.code] = false);
+        window.addEventListener('keydown', (e) => {
+            this.keys[e.code] = true;
+            if (e.code === 'Space') this.keyboardActionPressed = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            this.keys[e.code] = false;
+            if (e.code === 'Space') this.keyboardActionPressed = false;
+        });
 
         // Prevent default touch behaviors to stop scrolling
         document.body.addEventListener('touchstart', (e) => {
@@ -47,7 +54,6 @@ export class InputManager {
                 if (this.actionTouchId === null) {
                     this.actionTouchId = t.identifier;
                     this.actionPressed = true;
-                    this.keys['Space'] = true; // Emulate space
                 }
             }
         }
@@ -84,9 +90,12 @@ export class InputManager {
             if (t.identifier === this.actionTouchId) {
                 this.actionTouchId = null;
                 this.actionPressed = false;
-                this.keys['Space'] = false;
             }
         }
+    }
+
+    isActionActive() {
+        return this.actionPressed || this.keyboardActionPressed;
     }
 
     // WASD Fallback

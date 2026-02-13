@@ -30,7 +30,32 @@ export interface GameConfig {
 
 export class StorageManager {
     private db: IDBDatabase | null = null;
-    private objectUrls: string[] = [];
+    private objectUrls: Map<string, string> = new Map();
+
+    private getOrCreateObjectUrl(assetId: string, data: Blob): string {
+        const existingUrl = this.objectUrls.get(assetId);
+        if (existingUrl) {
+            return existingUrl;
+        }
+
+        const url = URL.createObjectURL(data);
+        this.objectUrls.set(assetId, url);
+        return url;
+    }
+
+    private replaceObjectUrl(assetId: string, data: Blob): string {
+        this.revokeObjectUrl(assetId);
+        const url = URL.createObjectURL(data);
+        this.objectUrls.set(assetId, url);
+        return url;
+    }
+
+    private revokeObjectUrl(assetId: string): void {
+        const existingUrl = this.objectUrls.get(assetId);
+        if (!existingUrl) return;
+        URL.revokeObjectURL(existingUrl);
+        this.objectUrls.delete(assetId);
+    }
 
     async init(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -57,10 +82,6 @@ export class StorageManager {
     async saveAsset(id: string, type: 'photo' | 'audio', name: string, data: Blob, text?: string): Promise<StoredAsset> {
         if (!this.db) throw new Error('Storage not initialized');
 
-        // Revoke old URL if exists
-        await this.deleteAsset(id);
-
-        const url = URL.createObjectURL(data);
         const assetData: StoredAssetData = {
             id,
             type,
@@ -76,8 +97,8 @@ export class StorageManager {
             const request = store.put(assetData);
 
             request.onsuccess = () => {
-                this.objectUrls.push(url);
-                resolve({ ...assetData, url });
+                const assetUrl = this.replaceObjectUrl(id, data);
+                resolve({ ...assetData, url: assetUrl });
             };
             request.onerror = () => reject(request.error);
         });
@@ -94,9 +115,7 @@ export class StorageManager {
             request.onsuccess = () => {
                 const assetData = request.result as StoredAssetData | undefined;
                 if (assetData) {
-                    // Create fresh object URL from stored blob
-                    const url = URL.createObjectURL(assetData.data);
-                    this.objectUrls.push(url);
+                    const url = this.getOrCreateObjectUrl(assetData.id, assetData.data);
                     resolve({ ...assetData, url });
                 } else {
                     resolve(null);
@@ -117,9 +136,7 @@ export class StorageManager {
             request.onsuccess = () => {
                 const assetsData = request.result as StoredAssetData[];
                 const assets: StoredAsset[] = assetsData.map(assetData => {
-                    // Create fresh object URL from stored blob
-                    const url = URL.createObjectURL(assetData.data);
-                    this.objectUrls.push(url);
+                    const url = this.getOrCreateObjectUrl(assetData.id, assetData.data);
                     return { ...assetData, url };
                 });
                 if (type) {
@@ -159,17 +176,15 @@ export class StorageManager {
     async deleteAsset(id: string): Promise<void> {
         if (!this.db) throw new Error('Storage not initialized');
 
-        const existing = await this.getAsset(id);
-        if (existing?.url) {
-            URL.revokeObjectURL(existing.url);
-        }
-
         return new Promise((resolve, reject) => {
             const transaction = this.db!.transaction([STORE_ASSETS], 'readwrite');
             const store = transaction.objectStore(STORE_ASSETS);
             const request = store.delete(id);
 
-            request.onsuccess = () => resolve();
+            request.onsuccess = () => {
+                this.revokeObjectUrl(id);
+                resolve();
+            };
             request.onerror = () => reject(request.error);
         });
     }
@@ -204,8 +219,8 @@ export class StorageManager {
     }
 
     cleanup(): void {
-        this.objectUrls.forEach(url => URL.revokeObjectURL(url));
-        this.objectUrls = [];
+        this.objectUrls.forEach((url) => URL.revokeObjectURL(url));
+        this.objectUrls.clear();
     }
 }
 

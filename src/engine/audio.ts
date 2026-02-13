@@ -1,4 +1,5 @@
 import { GameData } from "../content";
+import { resolveAssetPath } from "./assetPath";
 
 export class AudioManager {
     ctx: AudioContext;
@@ -22,7 +23,7 @@ export class AudioManager {
         // Use custom BGM if available
         const bgmUrl = GameData.useCustomBGM && GameData.customBGMUrl 
             ? GameData.customBGMUrl 
-            : '/assets/bgm.mp3';
+            : resolveAssetPath('assets/bgm.mp3');
         
         this.bgm = new Audio(bgmUrl);
         this.bgm.loop = true;

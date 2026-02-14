@@ -88,7 +88,7 @@ export class AdminState implements State {
         if (!files || files.length === 0) return;
 
         for (const file of Array.from(files)) {
-            if (!file.type.startsWith('image/')) {
+            if (!this.isSupportedImageFile(file)) {
                 console.warn('Skipping non-image file:', file.name);
                 continue;
             }
@@ -105,6 +105,12 @@ export class AdminState implements State {
         input.value = '';
         await this.loadExistingAssets();
         this.updateUI();
+    }
+
+    private isSupportedImageFile(file: File): boolean {
+        if (file.type.startsWith('image/')) return true;
+        const lowerName = file.name.toLowerCase();
+        return lowerName.endsWith('.heic') || lowerName.endsWith('.heif');
     }
 
     async handleAudioUpload(e: Event) {

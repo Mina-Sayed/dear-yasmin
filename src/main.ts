@@ -98,7 +98,7 @@ const uiHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="margin: 0; font-size: 1.1rem;">📸 Photos (${GameData.memories.length} default)</h3>
                 <button id="admin-add-photo" style="padding: 8px 16px; font-size: 0.9rem;">+ Add Photos</button>
-                <input type="file" id="admin-photo-input" accept="image/*" multiple style="display: none;">
+                <input type="file" id="admin-photo-input" accept="image/*,.heic,.heif" multiple style="display: none;">
             </div>
             <div id="admin-photo-list" style="max-height: 200px; overflow-y: auto;">
                 <p style="color: #888; text-align: center;">Loading...</p>

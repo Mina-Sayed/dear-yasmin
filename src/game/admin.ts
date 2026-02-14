@@ -22,7 +22,7 @@ export class AdminState implements State {
             await storage.init();
         } catch (e) {
             console.error('Failed to init storage:', e);
-            alert('Storage not supported in this browser');
+            alert('Cloud storage is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then redeploy.');
             await this.returnToIntro();
             return;
         }

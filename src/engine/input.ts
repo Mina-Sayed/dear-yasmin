@@ -9,6 +9,11 @@ export class InputManager {
     private touchId: number | null = null;
     private actionTouchId: number | null = null;
 
+    private isGameTouchContext(): boolean {
+        const gameScreen = document.getElementById('game-ui');
+        return !!gameScreen && !gameScreen.classList.contains('hidden');
+    }
+
     constructor() {
         this.startListening();
     }
@@ -32,36 +37,40 @@ export class InputManager {
         window.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
         window.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
         window.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+        window.addEventListener('touchcancel', (e) => this.handleTouchEnd(e));
     }
 
     handleTouchStart(e: TouchEvent) {
+        if (!this.isGameTouchContext()) return;
+
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
+            const target = t.target as HTMLElement | null;
+            if (target && target.closest('button, input, a, [role="button"]')) {
+                continue;
+            }
 
-            // Check if touch is on a UI element (like a button) - if so, ignore for joystick
-            // But simple heuristic: Left side (bottom half) = Joystick, Right side = Action
+            const isLeftControlZone = t.clientX < window.innerWidth * 0.7;
 
-            const isBottomHalf = t.clientY > window.innerHeight * 0.4;
-
-            if (isBottomHalf && t.clientX < window.innerWidth / 2) {
+            if (isLeftControlZone) {
                 if (this.touchId === null) {
                     this.touchId = t.identifier;
                     this.dragStart = { x: t.clientX, y: t.clientY };
                     this.joystick.active = true;
+                    e.preventDefault();
                 }
-            } else if (isBottomHalf) {
+            } else {
                 // Right side -> Action
                 if (this.actionTouchId === null) {
                     this.actionTouchId = t.identifier;
                     this.actionPressed = true;
+                    e.preventDefault();
                 }
             }
         }
     }
 
     handleTouchMove(e: TouchEvent) {
-        if (this.touchId === null) return;
-
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
             if (t.identifier === this.touchId && this.dragStart) {
@@ -75,6 +84,7 @@ export class InputManager {
 
                 this.joystick.x = Math.cos(angle) * (dist / max);
                 this.joystick.y = Math.sin(angle) * (dist / max);
+                e.preventDefault();
             }
         }
     }

@@ -1,10 +1,68 @@
-import { storage } from "./engine/storage";
+import { storage, StoredAsset } from "./engine/storage";
 import { resolveAssetPath } from "./engine/assetPath";
 
 export interface Memory {
     id: number;
     text: string;
     img: string;
+}
+
+const UPLOAD_NAME_PREFIX = /^photo_\d+_[a-z0-9]+-/i;
+
+function normalizePhotoKey(name: string): string {
+    return name.trim().toLowerCase().replace(UPLOAD_NAME_PREFIX, '');
+}
+
+function pickPreferredAsset(current: StoredAsset | undefined, incoming: StoredAsset): StoredAsset {
+    if (!current) return incoming;
+
+    const currentHasText = !!(current.text && current.text.trim());
+    const incomingHasText = !!(incoming.text && incoming.text.trim());
+
+    if (incomingHasText && !currentHasText) return incoming;
+    if (incoming.createdAt > current.createdAt) return incoming;
+    return current;
+}
+
+function mergeUniquePhotos(tablePhotos: StoredAsset[], bucketPhotos: StoredAsset[]): StoredAsset[] {
+    const textByKey = new Map<string, string>();
+    const bucketByKey = new Map<string, StoredAsset>();
+    const tableByKey = new Map<string, StoredAsset>();
+    const orderedKeys: string[] = [];
+    const keySeen = new Set<string>();
+
+    const rememberOrder = (key: string) => {
+        if (keySeen.has(key)) return;
+        keySeen.add(key);
+        orderedKeys.push(key);
+    };
+
+    for (const photo of tablePhotos) {
+        const key = normalizePhotoKey(photo.name);
+        if (photo.text && photo.text.trim()) {
+            textByKey.set(key, photo.text);
+        }
+        tableByKey.set(key, pickPreferredAsset(tableByKey.get(key), photo));
+    }
+
+    for (const photo of bucketPhotos) {
+        const key = normalizePhotoKey(photo.name);
+        bucketByKey.set(key, pickPreferredAsset(bucketByKey.get(key), photo));
+        rememberOrder(key);
+    }
+
+    for (const key of tableByKey.keys()) {
+        rememberOrder(key);
+    }
+
+    return orderedKeys
+        .map((key) => {
+            const base = bucketByKey.get(key) || tableByKey.get(key);
+            if (!base) return null;
+            const text = textByKey.get(key) || base.text;
+            return text ? { ...base, text } : base;
+        })
+        .filter((asset): asset is StoredAsset => !!asset);
 }
 
 // Default memories (fallback)
@@ -37,20 +95,12 @@ export const GameData = {
                 storage.listBucketAssets('photo')
             ]);
 
-            // Prefer bucket files as source of truth, but keep table text metadata when names match.
-            const textByName = new Map<string, string>();
-            tablePhotos.forEach((photo) => {
-                if (photo.text) {
-                    textByName.set(photo.name.toLowerCase(), photo.text);
-                }
-            });
-
-            const photos = bucketPhotos.length > 0 ? bucketPhotos : tablePhotos;
+            const photos = mergeUniquePhotos(tablePhotos, bucketPhotos);
             if (photos.length > 0) {
                 // Replace default memories with custom photos and their text
                 this.memories = photos.map((photo, index) => ({
                     id: index + 1,
-                    text: textByName.get(photo.name.toLowerCase()) || photo.text || defaultMemories[index]?.text || `Memory ${index + 1} ❤️`,
+                    text: photo.text || defaultMemories[index]?.text || `Memory ${index + 1} ❤️`,
                     img: photo.url
                 }));
             } else {

@@ -32,7 +32,10 @@ export const GameData = {
             await storage.init();
 
             // Load custom photos
-            const photos = await storage.getAllAssets('photo');
+            let photos = await storage.getAllAssets('photo');
+            if (photos.length === 0) {
+                photos = await storage.listBucketAssets('photo');
+            }
             if (photos.length > 0) {
                 // Replace default memories with custom photos and their text
                 this.memories = photos.map((photo, index) => ({
@@ -46,8 +49,11 @@ export const GameData = {
 
             // Load custom audio
             const useCustom = await storage.getConfig('useCustomBGM');
-            const audioAssets = await storage.getAllAssets('audio');
-            if (useCustom && audioAssets.length > 0) {
+            let audioAssets = await storage.getAllAssets('audio');
+            if (audioAssets.length === 0) {
+                audioAssets = await storage.listBucketAssets('audio');
+            }
+            if (useCustom !== false && audioAssets.length > 0) {
                 this.useCustomBGM = true;
                 this.customBGMUrl = audioAssets[0].url;
             } else {

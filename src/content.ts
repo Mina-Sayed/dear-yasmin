@@ -19,7 +19,7 @@ export const defaultMemories: Memory[] = [
 // Reactive GameData that can be updated
 export const GameData = {
     heroName: "Yasmin",
-    secretCode: "2024",
+    secretCode: "30924",
     finalMessage: "Happy Anniversary my love! ❤️\nHere's to many more adventures together.",
     memories: [...defaultMemories] as Memory[],
     level2StarsToWin: 10,

@@ -19,6 +19,10 @@ interface StorageListItem {
     name: string;
     id?: string;
     updated_at?: string;
+    created_at?: string;
+    metadata?: {
+        mimetype?: string;
+    };
 }
 
 export interface StoredAsset {
@@ -266,6 +270,10 @@ export class StorageManager {
     async listBucketAssets(type: AssetType): Promise<StoredAsset[]> {
         const client = this.getClient();
         const folder = type === 'photo' ? 'photos' : 'audio';
+        const expectedMimePrefix = type === 'photo' ? 'image/' : 'audio/';
+        const expectedExt = type === 'photo'
+            ? /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif|avif)$/i
+            : /\.(mp3|wav|ogg|m4a|aac|flac)$/i;
 
         const { data, error } = await client.storage
             .from(BUCKET_NAME)
@@ -279,10 +287,16 @@ export class StorageManager {
         }
 
         return (data as StorageListItem[])
-            .filter((item) => !!item.name && !item.name.endsWith('/'))
+            .filter((item) => {
+                if (!item.name || item.name.endsWith('/')) return false;
+                const mimetype = item.metadata?.mimetype?.toLowerCase();
+                if (mimetype) return mimetype.startsWith(expectedMimePrefix);
+                return expectedExt.test(item.name);
+            })
             .map((item, index) => {
                 const path = `${folder}/${item.name}`;
-                const ts = item.updated_at ? new Date(item.updated_at).getTime() : Date.now() + index;
+                const tsSource = item.updated_at || item.created_at;
+                const ts = tsSource ? new Date(tsSource).getTime() : Date.now() + index;
                 return {
                     id: item.id || `${folder}_${index}_${item.name}`,
                     type,

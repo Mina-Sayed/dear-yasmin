@@ -32,15 +32,25 @@ export const GameData = {
             await storage.init();
 
             // Load custom photos
-            let photos = await storage.getAllAssets('photo');
-            if (photos.length === 0) {
-                photos = await storage.listBucketAssets('photo');
-            }
+            const [tablePhotos, bucketPhotos] = await Promise.all([
+                storage.getAllAssets('photo'),
+                storage.listBucketAssets('photo')
+            ]);
+
+            // Prefer bucket files as source of truth, but keep table text metadata when names match.
+            const textByName = new Map<string, string>();
+            tablePhotos.forEach((photo) => {
+                if (photo.text) {
+                    textByName.set(photo.name.toLowerCase(), photo.text);
+                }
+            });
+
+            const photos = bucketPhotos.length > 0 ? bucketPhotos : tablePhotos;
             if (photos.length > 0) {
                 // Replace default memories with custom photos and their text
                 this.memories = photos.map((photo, index) => ({
                     id: index + 1,
-                    text: photo.text || defaultMemories[index]?.text || `Memory ${index + 1} ❤️`,
+                    text: textByName.get(photo.name.toLowerCase()) || photo.text || defaultMemories[index]?.text || `Memory ${index + 1} ❤️`,
                     img: photo.url
                 }));
             } else {
@@ -49,11 +59,13 @@ export const GameData = {
 
             // Load custom audio
             const useCustom = await storage.getConfig('useCustomBGM');
-            let audioAssets = await storage.getAllAssets('audio');
-            if (audioAssets.length === 0) {
-                audioAssets = await storage.listBucketAssets('audio');
-            }
-            if (useCustom !== false && audioAssets.length > 0) {
+            const [tableAudioAssets, bucketAudioAssets] = await Promise.all([
+                storage.getAllAssets('audio'),
+                storage.listBucketAssets('audio')
+            ]);
+            const audioAssets = bucketAudioAssets.length > 0 ? bucketAudioAssets : tableAudioAssets;
+
+            if (audioAssets.length > 0 && useCustom !== false) {
                 this.useCustomBGM = true;
                 this.customBGMUrl = audioAssets[0].url;
             } else {

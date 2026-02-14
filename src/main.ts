@@ -157,6 +157,7 @@ try {
         if (GameData.useCustomBGM) {
             audio.setupBGM();
         }
+        audio.tryAutoplayBGM();
 
         // Initial State
         sm.changeState(new IntroState(sm));

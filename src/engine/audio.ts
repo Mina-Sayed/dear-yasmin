@@ -1,9 +1,12 @@
 import { GameData } from "../content";
 import { resolveAssetPath } from "./assetPath";
 
+const BGM_AUTOPLAY_KEY = "lq_bgm_autoplay";
+
 export class AudioManager {
     ctx: AudioContext;
     bgm: HTMLAudioElement | null = null;
+    private unlockHandlerBound = false;
 
     constructor() {
         // Handle browser autoplay policy
@@ -30,16 +33,66 @@ export class AudioManager {
         this.bgm.volume = 0.5;
     }
 
-    startBGM() {
+    private rememberAutoplayPreference() {
+        try {
+            localStorage.setItem(BGM_AUTOPLAY_KEY, "1");
+        } catch {
+            // Ignore storage restrictions.
+        }
+    }
+
+    private shouldAutoplayFromPreference(): boolean {
+        try {
+            return localStorage.getItem(BGM_AUTOPLAY_KEY) === "1";
+        } catch {
+            return false;
+        }
+    }
+
+    private bindUnlockToRetryBGM() {
+        if (this.unlockHandlerBound) return;
+        this.unlockHandlerBound = true;
+
+        const onUserInteract = () => {
+            this.resume();
+            this.playBGM(false, false);
+            window.removeEventListener("pointerdown", onUserInteract);
+            window.removeEventListener("touchstart", onUserInteract);
+            window.removeEventListener("keydown", onUserInteract);
+            this.unlockHandlerBound = false;
+        };
+
+        window.addEventListener("pointerdown", onUserInteract, { once: true });
+        window.addEventListener("touchstart", onUserInteract, { once: true });
+        window.addEventListener("keydown", onUserInteract, { once: true });
+    }
+
+    private playBGM(restart: boolean, rememberPreference: boolean) {
         // Re-setup BGM in case GameData was updated
         if (GameData.useCustomBGM && this.bgm?.src !== GameData.customBGMUrl) {
             this.setupBGM();
         }
-        
-        if (this.bgm) {
-            this.bgm.currentTime = 0;
-            this.bgm.play().catch(e => console.log("Audio autoplay blocked until interaction", e));
+
+        if (rememberPreference) {
+            this.rememberAutoplayPreference();
         }
+
+        if (this.bgm) {
+            if (restart) this.bgm.currentTime = 0;
+            this.bgm.play().catch((e) => {
+                console.log("Audio autoplay blocked until interaction", e);
+                this.bindUnlockToRetryBGM();
+            });
+        }
+    }
+
+    startBGM() {
+        this.playBGM(true, true);
+    }
+
+    tryAutoplayBGM() {
+        if (!this.shouldAutoplayFromPreference()) return;
+        this.playBGM(false, false);
     }
 
     resume() {

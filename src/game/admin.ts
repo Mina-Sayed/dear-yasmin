@@ -6,9 +6,15 @@ import { GameData } from "../content";
 
 export class AdminState implements State {
     sm: StateMachine;
+    private static readonly ADMIN_PAGE_SIZE = 12;
+    private static readonly PREVIEW_PAGE_SIZE = 15;
+    private static readonly MAX_IMAGE_SIZE_MB = 15;
+    private static readonly YIELD_EVERY_UPLOADS = 3;
     private eventListeners: { el: HTMLElement; type: string; handler: EventListener }[] = [];
     private photos: StoredAsset[] = [];
     private audio: StoredAsset | null = null;
+    private adminPage = 1;
+    private previewPage = 1;
 
     constructor(sm: StateMachine) {
         this.sm = sm;
@@ -87,9 +93,23 @@ export class AdminState implements State {
         const files = input.files;
         if (!files || files.length === 0) return;
 
-        for (const file of Array.from(files)) {
+        const maxImageSizeBytes = AdminState.MAX_IMAGE_SIZE_MB * 1024 * 1024;
+        let uploadedCount = 0;
+        let skippedLargeCount = 0;
+        let skippedUnsupportedCount = 0;
+        let failedCount = 0;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             if (!this.isSupportedImageFile(file)) {
                 console.warn('Skipping non-image file:', file.name);
+                skippedUnsupportedCount++;
+                continue;
+            }
+
+            if (file.size > maxImageSizeBytes) {
+                console.warn('Skipping large image file:', file.name, file.size);
+                skippedLargeCount++;
                 continue;
             }
 
@@ -97,13 +117,30 @@ export class AdminState implements State {
             try {
                 await storage.saveAsset(id, 'photo', file.name, file);
                 this.sm.audio.play('click');
+                uploadedCount++;
             } catch (err) {
                 console.error('Failed to save photo:', err);
+                failedCount++;
             }
+
+            if ((i + 1) % AdminState.YIELD_EVERY_UPLOADS === 0) {
+                await this.yieldToBrowser();
+            }
+        }
+
+        const report: string[] = [];
+        if (uploadedCount > 0) report.push(`Uploaded ${uploadedCount} photo(s).`);
+        if (skippedLargeCount > 0) report.push(`Skipped ${skippedLargeCount} file(s) larger than ${AdminState.MAX_IMAGE_SIZE_MB}MB.`);
+        if (skippedUnsupportedCount > 0) report.push(`Skipped ${skippedUnsupportedCount} unsupported file(s).`);
+        if (failedCount > 0) report.push(`Failed ${failedCount} upload(s).`);
+        if (report.length > 0) {
+            alert(report.join(' '));
         }
 
         input.value = '';
         await this.loadExistingAssets();
+        this.goToLastAdminPage();
+        this.goToLastPreviewPage();
         this.updateUI();
     }
 
@@ -146,6 +183,7 @@ export class AdminState implements State {
         const allAssets = await storage.getAllAssets();
         this.photos = allAssets.filter(a => a.type === 'photo');
         this.audio = allAssets.find(a => a.type === 'audio') || null;
+        this.clampPages();
     }
 
     private clearChildren(el: HTMLElement) {
@@ -159,6 +197,67 @@ export class AdminState implements State {
         p.style.cssText = 'color: #888; text-align: center;';
         p.textContent = text;
         return p;
+    }
+
+    private async yieldToBrowser(): Promise<void> {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    }
+
+    private totalPages(pageSize: number): number {
+        return Math.max(1, Math.ceil(this.photos.length / pageSize));
+    }
+
+    private clampPages() {
+        this.adminPage = Math.min(Math.max(1, this.adminPage), this.totalPages(AdminState.ADMIN_PAGE_SIZE));
+        this.previewPage = Math.min(Math.max(1, this.previewPage), this.totalPages(AdminState.PREVIEW_PAGE_SIZE));
+    }
+
+    private goToLastAdminPage() {
+        this.adminPage = this.totalPages(AdminState.ADMIN_PAGE_SIZE);
+    }
+
+    private goToLastPreviewPage() {
+        this.previewPage = this.totalPages(AdminState.PREVIEW_PAGE_SIZE);
+    }
+
+    private getPhotoSlice(page: number, pageSize: number): { start: number; items: StoredAsset[] } {
+        const start = (page - 1) * pageSize;
+        return {
+            start,
+            items: this.photos.slice(start, start + pageSize)
+        };
+    }
+
+    private createPagination(
+        currentPage: number,
+        totalPages: number,
+        onPageChange: (page: number) => void
+    ): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px;';
+
+        const prev = document.createElement('button');
+        prev.textContent = 'Prev';
+        prev.disabled = currentPage <= 1;
+        prev.style.cssText = 'padding: 6px 10px; font-size: 0.8rem;';
+        prev.onclick = () => {
+            if (currentPage > 1) onPageChange(currentPage - 1);
+        };
+
+        const pageText = document.createElement('span');
+        pageText.style.cssText = 'font-size: 0.85rem; color: #ddd; min-width: 90px; text-align: center;';
+        pageText.textContent = `Page ${currentPage} / ${totalPages}`;
+
+        const next = document.createElement('button');
+        next.textContent = 'Next';
+        next.disabled = currentPage >= totalPages;
+        next.style.cssText = 'padding: 6px 10px; font-size: 0.8rem;';
+        next.onclick = () => {
+            if (currentPage < totalPages) onPageChange(currentPage + 1);
+        };
+
+        wrap.append(prev, pageText, next);
+        return wrap;
     }
 
     private createPhotoItem(photo: StoredAsset, index: number): HTMLDivElement {
@@ -297,9 +396,17 @@ export class AdminState implements State {
             if (this.photos.length === 0) {
                 photoList.appendChild(this.createEmptyMessage('No photos uploaded yet'));
             } else {
-                this.photos.forEach((photo, index) => {
-                    photoList.appendChild(this.createPhotoItem(photo, index));
+                const totalPages = this.totalPages(AdminState.ADMIN_PAGE_SIZE);
+                const pageData = this.getPhotoSlice(this.adminPage, AdminState.ADMIN_PAGE_SIZE);
+                pageData.items.forEach((photo, index) => {
+                    photoList.appendChild(this.createPhotoItem(photo, pageData.start + index));
                 });
+                photoList.appendChild(
+                    this.createPagination(this.adminPage, totalPages, (page) => {
+                        this.adminPage = page;
+                        this.updateUI();
+                    })
+                );
             }
         }
 
@@ -334,11 +441,20 @@ export class AdminState implements State {
         const list = document.createElement('div');
         list.style.cssText = 'max-height: 250px; overflow-y: auto; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px;';
 
-        this.photos.forEach((photo, index) => {
-            list.appendChild(this.createPreviewItem(photo, index));
+        const totalPages = this.totalPages(AdminState.PREVIEW_PAGE_SIZE);
+        const pageData = this.getPhotoSlice(this.previewPage, AdminState.PREVIEW_PAGE_SIZE);
+        pageData.items.forEach((photo, index) => {
+            list.appendChild(this.createPreviewItem(photo, pageData.start + index));
         });
 
-        preview.append(title, list);
+        preview.append(
+            title,
+            list,
+            this.createPagination(this.previewPage, totalPages, (page) => {
+                this.previewPage = page;
+                this.updatePreview();
+            })
+        );
     }
 
     async deletePhoto(id: string) {

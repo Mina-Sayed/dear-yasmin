@@ -58,14 +58,13 @@ export const GameData = {
             }
 
             // Load custom audio
-            const useCustom = await storage.getConfig('useCustomBGM');
             const [tableAudioAssets, bucketAudioAssets] = await Promise.all([
                 storage.getAllAssets('audio'),
                 storage.listBucketAssets('audio')
             ]);
             const audioAssets = bucketAudioAssets.length > 0 ? bucketAudioAssets : tableAudioAssets;
 
-            if (audioAssets.length > 0 && useCustom !== false) {
+            if (audioAssets.length > 0) {
                 this.useCustomBGM = true;
                 this.customBGMUrl = audioAssets[0].url;
             } else {
